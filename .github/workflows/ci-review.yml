@@ -54,16 +54,13 @@ jobs:
           COMMENT_ID: ${{steps.comment.outputs.comment_id}}
         run: |
           # --- Lambda 呼び出し（--no-buffer で NDJSON をリアルタイム受信） ---
-          curl -sS --no-buffer -X POST \
-            -H "Content-Type: application/json" \
-            -d @/tmp/payload.json \
-            "$LAMBDA_URL" > /tmp/response.ndjson
-
-          # --- NDJSON をパースして変数に格納 ---
           EXPLAIN=""
           REVIEW=""
 
-          while IFS= read -r line; do
+          curl -sS --no-buffer -X POST \
+            -H "Content-Type: application/json" \
+            -d @/tmp/payload.json \
+            "$LAMBDA_URL" | while IFS= read -r line; do
             [ -z "$line" ] && continue
             TYPE=$(echo "$line" | jq -r '.type')
             BODY=$(echo "$line" | jq -r '.body')
@@ -79,9 +76,11 @@ jobs:
                 ;;
               explain)
                 EXPLAIN="$BODY"
+                echo "$BODY" > /tmp/explain.txt
                 ;;
               review)
                 REVIEW="$BODY"
+                echo "$BODY" > /tmp/review.txt
                 ;;
               error)
                 echo "::warning::Lambda error: $BODY"
@@ -108,10 +107,10 @@ jobs:
                 -f body="$COMMENT_BODY" \
                 --silent
             fi
-          done < /tmp/response.ndjson
+          done
 
           # --- 最終コメント（両方揃ったか確認） ---
-          if [ -z "$EXPLAIN" ] && [ -z "$REVIEW" ]; then
+          if [ ! -s /tmp/explain.txt ] && [ ! -s /tmp/review.txt ]; then
             gh api \
               "repos/${{github.repository}}/issues/comments/$COMMENT_ID" \
               -X PATCH \
