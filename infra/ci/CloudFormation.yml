@@ -85,7 +85,7 @@ Resources:
     Type: AWS::Lambda::Url
     Properties:
       TargetFunctionArn: !GetAtt CIReviewFunction.Arn
-      AuthType: AWS_IAM
+      AuthType: NONE
       InvokeMode: RESPONSE_STREAM
 
   CIReviewFunctionUrlPermission:
@@ -94,7 +94,7 @@ Resources:
       FunctionName: !Ref CIReviewFunction
       Action: lambda:InvokeFunctionUrl
       Principal: "*"
-      FunctionUrlAuthType: AWS_IAM
+      FunctionUrlAuthType: NONE
 
   # ========================================
   # CloudWatch Log Group
