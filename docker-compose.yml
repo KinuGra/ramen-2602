@@ -1,7 +1,7 @@
 services:
   backend:
     build: ./backend
-    command: ["air", "-c", ".air.toml"] # ローカルだけ air を使う
+    command: ["air", "-c", ".air.toml"]
     ports:
       - "8080:8080"
     volumes:
