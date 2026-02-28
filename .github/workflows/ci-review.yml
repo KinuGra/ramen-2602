@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
         run: |
           COMMENT_ID=$(gh api \
-            "repos/$ {{github.repository}}/issues/${{github.event.pull_request.number}}/comments" \
+            "repos/${{github.repository}}/issues/${{github.event.pull_request.number}}/comments" \
             -f body="⏳ **AI Review Bot** — 処理中…" \
             --jq '.id')
           echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
@@ -51,7 +51,7 @@ jobs:
       - name: Call Lambda & update PR comment
         env:
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-          COMMENT_ID: $ steps.comment.outputs.comment_id 
+          COMMENT_ID: ${{steps.comment.outputs.comment_id}}
         run: |
           # --- Lambda 呼び出し（--no-buffer で NDJSON をリアルタイム受信） ---
           curl -sS --no-buffer -X POST \
