@@ -76,7 +76,7 @@ Resources:
       Code:
         # S3 にビルド済み index.mjs を zip してアップロード済みとする
         S3Bucket: 2602-tenri
-        S3Key: CI/lambda.mjs
+        S3Key: CI/lambda.zip
 
   # ========================================
   # Lambda Function URL (RESPONSE_STREAM)
