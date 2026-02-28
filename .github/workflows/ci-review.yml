@@ -9,7 +9,7 @@ permissions:
   pull-requests: write
 
 env:
-  LAMBDA_URL: $ secrets.CI_REVIEW_LAMBDA_URL 
+  LAMBDA_URL: ${secrets.CI_REVIEW_LAMBDA_URL} 
   MAX_FILES: 10
 
 jobs:
@@ -25,11 +25,11 @@ jobs:
       - name: Collect diffs
         id: diff
         env:
-          GH_TOKEN: $ secrets.GITHUB_TOKEN 
+          GH_TOKEN: ${secrets.GITHUB_TOKEN}
         run: |
           # PR の変更ファイル一覧を取得（最大 MAX_FILES）
           FILES_JSON=$(gh api \
-            "repos/$ github.repository /pulls/$ github.event.pull_request.number /files" \
+            "repos/${github.repository}/pulls/${github.event.pull_request.number}/files" \
             --jq "[.[:$MAX_FILES][] | {filename: .filename, patch: (.patch // \"\")}]")
 
           # ファイルに書き出し（シェル変数の長さ制限回避）
@@ -39,10 +39,10 @@ jobs:
       - name: Create placeholder comment
         id: comment
         env:
-          GH_TOKEN: $ secrets.GITHUB_TOKEN 
+          GH_TOKEN: ${secrets.GITHUB_TOKEN}
         run: |
           COMMENT_ID=$(gh api \
-            "repos/$ github.repository /issues/$ github.event.pull_request.number /comments" \
+            "repos/$ {github.repository} /issues/$ {github.event.pull_request.number} /comments" \
             -f body="⏳ **AI Review Bot** — 処理中…" \
             --jq '.id')
           echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
@@ -50,7 +50,7 @@ jobs:
       # ── 4. Lambda に差分を送信し NDJSON を受信 ──
       - name: Call Lambda & update PR comment
         env:
-          GH_TOKEN: $ secrets.GITHUB_TOKEN 
+          GH_TOKEN: ${secrets.GITHUB_TOKEN}
           COMMENT_ID: $ steps.comment.outputs.comment_id 
         run: |
           # --- Lambda 呼び出し（--no-buffer で NDJSON をリアルタイム受信） ---
@@ -72,7 +72,7 @@ jobs:
               status)
                 # コメントを status の内容で更新
                 gh api \
-                  "repos/$ github.repository /issues/comments/$COMMENT_ID" \
+                  "repos/${github.repository}/issues/comments/$COMMENT_ID" \
                   -X PATCH \
                   -f body="⏳ **AI Review Bot** — $BODY" \
                   --silent
@@ -103,7 +103,7 @@ jobs:
               fi
 
               gh api \
-                "repos/$ github.repository /issues/comments/$COMMENT_ID" \
+                "repos/${github.repository} /issues/comments/$COMMENT_ID" \
                 -X PATCH \
                 -f body="$COMMENT_BODY" \
                 --silent
@@ -113,7 +113,7 @@ jobs:
           # --- 最終コメント（両方揃ったか確認） ---
           if [ -z "$EXPLAIN" ] && [ -z "$REVIEW" ]; then
             gh api \
-              "repos/$ github.repository /issues/comments/$COMMENT_ID" \
+              "repos/${github.repository}/issues/comments/$COMMENT_ID" \
               -X PATCH \
               -f body="❌ **AI Review Bot** — レビュー結果を取得できませんでした" \
               --silent
