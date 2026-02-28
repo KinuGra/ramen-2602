@@ -52,8 +52,12 @@ Resources:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
                 Resource:
-                  - "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-micro-v1:0"
-                  - "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0"
+                  # inference profile（クロスリージョン推論: 実行先リージョンが不定のため * で許可）
+                  - "arn:aws:bedrock:*:*:inference-profile/us.amazon.nova-micro-v1:0"
+                  - "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  # foundation model（ルーティング先リージョンが不定）
+                  - "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0"
+                  - "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
 
   # ========================================
   # Lambda Function
@@ -71,8 +75,8 @@ Resources:
       Environment:
         Variables:
           BEDROCK_REGION: us-west-2
-          MODEL_EXPLAIN: amazon.nova-micro-v1:0
-          MODEL_REVIEW: anthropic.claude-3-5-sonnet-20241022-v2:0
+          MODEL_EXPLAIN: us.amazon.nova-micro-v1:0
+          MODEL_REVIEW: us.anthropic.claude-haiku-4-5-20251001-v1:0
       Code:
         # S3 にビルド済み index.mjs を zip してアップロード済みとする
         S3Bucket: 2602-tenri

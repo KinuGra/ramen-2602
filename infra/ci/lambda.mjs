@@ -1,7 +1,7 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-const client = new BedrockRuntimeClient({ region: process.env.BEDROCK_REGION ?? "us-west-2" });
-const MODEL_EXPLAIN = process.env.MODEL_EXPLAIN ?? "amazon.nova-micro-v1:0";
-const MODEL_REVIEW = process.env.MODEL_REVIEW ?? "anthropic.claude-3-5-sonnet-20241022-v2:0";
+const client = new BedrockRuntimeClient({ region: process.env.BEDROCK_REGION ?? "us-east-1" });
+const MODEL_EXPLAIN = process.env.MODEL_EXPLAIN ?? "us.amazon.nova-micro-v1:0";
+const MODEL_REVIEW = process.env.MODEL_REVIEW ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 const MAX_FILES = 10;
 const ndjson = (o) => JSON.stringify(o) + "\n";
 const decode = (b) => new TextDecoder().decode(b);
@@ -59,13 +59,14 @@ export const handler = awslambda.streamifyResponse(
             ndjson({ type: "status", body: "AIからのレスポンス待ち" })
         );
         // 2. 2モデルに非同期で投げ、完了次第 write
-        const explainP = invokeNova(diff).then((text) =>
-            responseStream.write(ndjson({ type: "explain", body: text }))
-        );
-        const reviewP = invokeClaude(diff).then((text) =>
-            responseStream.write(ndjson({ type: "review", body: text }))
-        );
-        await Promise.all([explainP, reviewP]);
+        const explainPromise = invokeNova(diff)
+            .then((t) => responseStream.write(ndjson({ type: "explain", body: t })))
+            .catch((e) => responseStream.write(ndjson({ type: "error", body: `[explain] ${e.message}` })));
+
+        const reviewPromise = invokeClaude(diff)
+            .then((t) => responseStream.write(ndjson({ type: "review", body: t })))
+            .catch((e) => responseStream.write(ndjson({ type: "error", body: `[review] ${e.message}` })));
+        await Promise.all([explainPromise, reviewPromise]);
         // 3. ストリーム終了
         responseStream.end();
     }
