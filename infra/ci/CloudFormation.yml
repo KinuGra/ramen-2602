@@ -1,0 +1,121 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CI Review Bot - GitHub Actions -> Lambda (HTTP Streaming) -> Bedrock
+
+Parameters:
+  FunctionName:
+    Type: String
+    Default: ci-review-bot
+  Runtime:
+    Type: String
+    Default: nodejs24.x
+  Timeout:
+    Type: Number
+    Default: 120
+  MemorySize:
+    Type: Number
+    Default: 512
+
+Resources:
+
+  # ========================================
+  # IAM Role - Lambda 実行ロール
+  # ========================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${FunctionName}-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${FunctionName}-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${FunctionName}:*"
+              # S3 からコード取得
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: "arn:aws:s3:::2602-tenri/CI/*"
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  # inference profile（クロスリージョン推論: 実行先リージョンが不定のため * で許可）
+                  - "arn:aws:bedrock:*:*:inference-profile/us.amazon.nova-micro-v1:0"
+                  - "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+                  # foundation model（ルーティング先リージョンが不定）
+                  - "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0"
+                  - "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
+
+  # ========================================
+  # Lambda Function
+  # ========================================
+  CIReviewFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionName
+      Runtime: !Ref Runtime
+      # .mjs (ESM) を使うため S3 デプロイ必須（ZipFile は index.js 固定で .mjs 不可）
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !Ref Timeout
+      MemorySize: !Ref MemorySize
+      Environment:
+        Variables:
+          BEDROCK_REGION: us-west-2
+          MODEL_EXPLAIN: us.amazon.nova-micro-v1:0
+          MODEL_REVIEW: us.anthropic.claude-haiku-4-5-20251001-v1:0
+      Code:
+        # S3 にビルド済み index.mjs を zip してアップロード済みとする
+        S3Bucket: 2602-tenri
+        S3Key: CI/lambda.zip
+
+  # ========================================
+  # Lambda Function URL (RESPONSE_STREAM)
+  # ========================================
+  CIReviewFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt CIReviewFunction.Arn
+      AuthType: NONE
+      InvokeMode: RESPONSE_STREAM
+
+  CIReviewFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CIReviewFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  # ========================================
+  # CloudWatch Log Group
+  # ========================================
+  CIReviewLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${FunctionName}"
+      RetentionInDays: 14
+
+Outputs:
+  FunctionUrl:
+    Description: Lambda Function URL (HTTP Streaming endpoint)
+    Value: !GetAtt CIReviewFunctionUrl.FunctionUrl
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt CIReviewFunction.Arn
+  RoleArn:
+    Description: Lambda Execution Role ARN
+    Value: !GetAtt LambdaExecutionRole.Arn

@@ -1,0 +1,120 @@
+name: CI Review Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  LAMBDA_URL: ${{secrets.CI_REVIEW_LAMBDA_URL}} 
+  MAX_FILES: 10
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      # ── 1. チェックアウト ──
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. 変更ファイルの差分を取得して JSON 化 ──
+      - name: Collect diffs
+        id: diff
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        run: |
+          # PR の変更ファイル一覧を取得（最大 MAX_FILES）
+          FILES_JSON=$(gh api \
+            "repos/${{github.repository}}/pulls/${{github.event.pull_request.number}}/files" \
+            --jq "[.[:$MAX_FILES][] | {filename: .filename, patch: (.patch // \"\")}]")
+
+          # ファイルに書き出し（シェル変数の長さ制限回避）
+          echo "$FILES_JSON" | jq -c '{files: .}' > /tmp/payload.json
+
+      # ── 3. PR に「処理中…」コメントを作成 ──
+      - name: Create placeholder comment
+        id: comment
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        run: |
+          COMMENT_ID=$(gh api \
+            "repos/${{github.repository}}/issues/${{github.event.pull_request.number}}/comments" \
+            -f body="⏳ **AI Review Bot** — 処理中…" \
+            --jq '.id')
+          echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
+
+      # ── 4. Lambda に差分を送信し NDJSON を受信 ──
+      - name: Call Lambda & update PR comment
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          COMMENT_ID: ${{steps.comment.outputs.comment_id}}
+        run: |
+          # --- Lambda 呼び出し（--no-buffer で NDJSON をリアルタイム受信） ---
+          EXPLAIN=""
+          REVIEW=""
+
+          curl -sS --no-buffer -X POST \
+            -H "Content-Type: application/json" \
+            -d @/tmp/payload.json \
+            "$LAMBDA_URL" | while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            TYPE=$(echo "$line" | jq -r '.type')
+            BODY=$(echo "$line" | jq -r '.body')
+
+            case "$TYPE" in
+              status)
+                # コメントを status の内容で更新
+                gh api \
+                  "repos/${{github.repository}}/issues/comments/$COMMENT_ID" \
+                  -X PATCH \
+                  -f body="⏳ **AI Review Bot** — $BODY" \
+                  --silent
+                ;;
+              explain)
+                EXPLAIN="$BODY"
+                echo "$BODY" > /tmp/explain.txt
+                ;;
+              review)
+                REVIEW="$BODY"
+                echo "$BODY" > /tmp/review.txt
+                ;;
+              error)
+                echo "::warning::Lambda error: $BODY"
+                ;;
+            esac
+
+            # explain or review を受け取るたびにコメントを更新
+            if [ -n "$EXPLAIN" ] || [ -n "$REVIEW" ]; then
+              COMMENT_BODY=""
+              if [ -n "$EXPLAIN" ]; then
+                COMMENT_BODY="## 📝 変更概要
+          $EXPLAIN"
+              fi
+              if [ -n "$REVIEW" ]; then
+                COMMENT_BODY="$COMMENT_BODY
+
+          ## 🔍 レビュー
+          $REVIEW"
+              fi
+
+              gh api \
+                "repos/${{github.repository}}/issues/comments/$COMMENT_ID" \
+                -X PATCH \
+                -f body="$COMMENT_BODY" \
+                --silent
+            fi
+          done
+
+          # --- 最終コメント（両方揃ったか確認） ---
+          if [ ! -s /tmp/explain.txt ] && [ ! -s /tmp/review.txt ]; then
+            gh api \
+              "repos/${{github.repository}}/issues/comments/$COMMENT_ID" \
+              -X PATCH \
+              -f body="❌ **AI Review Bot** — レビュー結果を取得できませんでした" \
+              --silent
+            exit 1
+          fi
