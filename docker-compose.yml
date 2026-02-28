@@ -1,0 +1,39 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/mydb
+    depends_on:
+      - db
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      # node_modulesがホストの空ディレクトリで潰れるのを防ぐ
+      - /app/node_modules
+    environment:
+      # Mac/Windowsでファイル監視が不安定な時に効く（必要ならON）
+      # - WATCHPACK_POLLING=true
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+    depends_on:
+      - backend
+  db:
+    image: postgres:16
+    container_name: my_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432" # ローカルから接続したい場合
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:
