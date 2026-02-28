@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
         run: |
           COMMENT_ID=$(gh api \
-            "repos/$ {{github.repository}} /issues/$ {{github.event.pull_request.number}} /comments" \
+            "repos/$ {{github.repository}}/issues/${{github.event.pull_request.number}}/comments" \
             -f body="⏳ **AI Review Bot** — 処理中…" \
             --jq '.id')
           echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
@@ -103,7 +103,7 @@ jobs:
               fi
 
               gh api \
-                "repos/${{github.repository}} /issues/comments/$COMMENT_ID" \
+                "repos/${{github.repository}}/issues/comments/$COMMENT_ID" \
                 -X PATCH \
                 -f body="$COMMENT_BODY" \
                 --silent
