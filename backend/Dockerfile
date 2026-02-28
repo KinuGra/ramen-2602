@@ -3,11 +3,8 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
-
 COPY . .
 
-# ホットリロードツール air
-RUN go install github.com/air-verse/air@latest
+RUN go build -o server .
 
-EXPOSE 8080
-CMD ["air", "-c", ".air.toml"]
+CMD ["./server"]
