@@ -3,11 +3,11 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
-
 COPY . .
 
-# ホットリロードツール air
+# air（開発用ホットリロード）と本番バイナリの両方を用意
 RUN go install github.com/air-verse/air@latest
+RUN go build -o server .
 
-EXPOSE 8080
-CMD ["air", "-c", ".air.toml"]
+# デフォルトは本番用（docker-compose で command 上書き可能）
+CMD ["./server"]
