@@ -2,3 +2,4 @@ CFNに [CloudFormation.yml]をデプロイする際は、Lambdaのmjsのハン�
 そのほかのディレクトリはいりません。
 手動で認証タイプをNONEにしてください。
 lambda.mjs -> index.mjs にファイルの名前を変えてください。
+おはよう。
